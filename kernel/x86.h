@@ -1,0 +1,92 @@
+// x86_64 replacement for riscv.h.
+// Lines tagged "x86_64:" differ from xv6-riscv; see
+// Intel SDM Vol. 3A Figure 5-11 for the paging-entry formats.
+
+// x86_64: rflags bits. riscv used sstatus.SIE for this.
+#define FL_IF 0x200 // interrupt enable
+
+#ifndef __ASSEMBLER__
+
+// enable device interrupts
+// x86_64: sti sets rflags.IF (riscv: set sstatus.SIE).
+// "memory" keeps the compiler from moving loads/stores across it.
+static inline void
+intr_on()
+{
+  asm volatile("sti" ::: "memory");
+}
+
+// disable device interrupts
+// x86_64: cli clears rflags.IF (riscv: clear sstatus.SIE).
+static inline void
+intr_off()
+{
+  asm volatile("cli" ::: "memory");
+}
+
+// are device interrupts enabled?
+// x86_64: rflags has no mov form, so read it through the stack.
+static inline int
+intr_get()
+{
+  uint64 rflags;
+  asm volatile("pushfq; popq %0" : "=r"(rflags));
+  return (rflags & FL_IF) != 0;
+}
+
+// x86_64: rsp instead of riscv sp.
+static inline uint64
+r_sp()
+{
+  uint64 x;
+  asm volatile("mov %%rsp, %0" : "=r"(x));
+  return x;
+}
+
+typedef uint64 pte_t;
+typedef uint64 *pagetable_t; // 512 PTEs
+
+#endif // __ASSEMBLER__
+
+#define PGSIZE  4096 // bytes per page
+#define PGSHIFT 12   // bits of offset within a page
+// x86_64: physical-address field of a paging-structure entry,
+// bits 12..51. Same position at all four levels when PS=0.
+#define PGMASK  0x000FFFFFFFFFF000
+
+#define PGROUNDUP(sz)  (((sz) + PGSIZE - 1) & ~(PGSIZE - 1))
+#define PGROUNDDOWN(a) (((a)) & ~(PGSIZE - 1))
+
+// x86_64: riscv had V/R/W/X/U. x86 has no R bit (present implies
+// readable) and X is inverted into XD, which needs EFER.NXE=1.
+// Bits 6..8 differ by level (D/PS/G/PAT); xv6 leaves them 0.
+// Bit 7 must stay 0 in PDPTEs and PDEs, or the CPU treats the
+// entry as a 1GB/2MB page instead of a pointer to a table.
+#define PTE_P   (1L << 0)  // present
+#define PTE_RW  (1L << 1)  // Read/write
+#define PTE_US  (1L << 2)  // User/supervisor
+#define PTE_PWT (1L << 3)  // Page-level write-through
+#define PTE_PCD (1L << 4)  // Page-level cache disable
+#define PTE_A   (1L << 5)  // Accessed
+#define PTE_XD  (1L << 63) // execute-disable
+
+// x86_64: the address field starts at bit 12, the same place as in
+// the physical address, so no shift is needed (riscv: >>12 <<10).
+#define PA2PTE(pa) ((uint64)(pa) & PGMASK)
+
+#define PTE2PA(pte) ((pte) & PGMASK)
+
+// x86_64: keep XD (bit 63) so uvmcopy() preserves no-execute.
+#define PTE_FLAGS(pte) ((pte) & 0x8000000000000FFF)
+
+// x86_64: four 9-bit page table indices (riscv Sv39: three).
+// level 3 = PML4, 2 = PDPT, 1 = PD, 0 = PT.
+#define PXMASK         0x1FF // 9 bits
+#define PXSHIFT(level) (PGSHIFT + (9 * (level)))
+#define PX(level, va)  ((((uint64)(va)) >> PXSHIFT(level)) & PXMASK)
+
+// one beyond the highest possible user virtual address.
+// x86_64: 48-bit addresses must be canonical (bits 63..47 equal),
+// so the lower half ends at 1<<47; 0x0000800000000000 is
+// non-canonical and faults with #GP.
+#define MAXVA (1L << (9 + 9 + 9 + 9 + 12 - 1))
