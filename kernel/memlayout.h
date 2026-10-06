@@ -1,63 +1,105 @@
-// Physical memory layout
-
-// qemu -machine virt is set up like this,
-// based on qemu's hw/riscv/virt.c:
+// Memory layout
 //
-// 00001000 -- boot ROM, provided by qemu
-// 02000000 -- CLINT
-// 0C000000 -- PLIC
-// 10000000 -- uart0
-// 10001000 -- virtio disk
-// 80000000 -- qemu's boot ROM loads the kernel here,
-//             then jumps here.
-// unused RAM after 80000000.
+// x86_64: unlike xv6-riscv, the kernel is not identity-mapped, so
+// physical and virtual addresses differ. This file has four parts:
+// physical addresses, physical <-> virtual conversion, kernel
+// virtual addresses, and user virtual addresses.
+// Needs PGSIZE and MAXVA from x86.h; include x86.h first.
 
-// the kernel uses physical memory thus:
-// 80000000 -- entry.S, then kernel text and data
-// end -- start of kernel page allocation area
-// PHYSTOP -- end RAM used by the kernel
+// ---------------------------------------------------------------
+// Physical addresses (qemu -machine pc)
+//
+// 00000000 -- low RAM; entryother is copied to 0x7000 to boot APs
+// 000A0000 -- VGA and BIOS ROM; the MP table is near 0xF0000
+// 00100000 -- multiboot loads the kernel here (EXTMEM)
+// end      -- start of kernel page allocation area
+// PHYSTOP  -- end of RAM used by the kernel
+// FEC00000 -- IOAPIC
+// FEE00000 -- LAPIC
+//
+// Never dereference these directly; convert with P2V or DEV2V.
+// ---------------------------------------------------------------
 
-// qemu puts UART registers here in physical memory.
-#define UART0     0x10000000L
-#define UART0_IRQ 10
+#define EXTMEM    0x100000   // kernel load address
+// x86_64: a physical address now (riscv: KERNBASE + 128MB).
+// RAM on pc starts at 0. Must stay below 2GB, the size of the
+// KERNBASE window.
+#define PHYSTOP   0x8000000  // 128MB
 
-// virtio mmio interface
-#define VIRTIO0     0x10001000
-#define VIRTIO0_IRQ 1
+// x86_64: IOAPIC and LAPIC replace PLIC and CLINT.
+#define IOAPIC_PA 0xFEC00000
+#define LAPIC_PA  0xFEE00000
 
-// core-local interrupt controller (CLINT)
-#define CLINT_BASE  0x02000000L
-#define CLINT(hart) (CLINT_BASE + (hart) * 4)
+// x86_64: COM1 and IDE are I/O ports reached with inb/outb, not
+// MMIO, so they need no mapping (riscv: UART0, VIRTIO0).
+// IRQ numbers live in traps.h.
+#define COM1      0x3F8
+#define IDE_BASE  0x1F0
 
-// qemu puts platform-level interrupt controller (PLIC) here.
-#define PLIC                 0x0c000000L
-#define PLIC_PRIORITY        (PLIC + 0x0)
-#define PLIC_PENDING         (PLIC + 0x1000)
-#define PLIC_SENABLE(hart)   (PLIC + 0x2080 + (hart) * 0x100)
-#define PLIC_SPRIORITY(hart) (PLIC + 0x201000 + (hart) * 0x2000)
-#define PLIC_SCLAIM(hart)    (PLIC + 0x201004 + (hart) * 0x2000)
+// ---------------------------------------------------------------
+// Physical <-> kernel virtual conversion
+//
+// x86_64: higher-half kernel. All of physical RAM is mapped at
+// KERNBASE + pa, inside the top 2GB required by -mcmodel=kernel.
+// ---------------------------------------------------------------
 
-// the kernel expects there to be RAM
-// for use by the kernel and user pages
-// from physical address 0x80000000 to PHYSTOP.
-#define KERNBASE 0x80000000L
-#define PHYSTOP  (KERNBASE + 128 * 1024 * 1024)
+// x86_64: a virtual address now (riscv: start of RAM).
+#define KERNBASE  0xFFFFFFFF80000000 // first kernel virtual address
+#define KERNLINK  (KERNBASE + EXTMEM) // address where kernel is linked
 
-// map the trampoline page to the highest address,
-// in both user and kernel space.
-#define TRAMPOLINE (MAXVA - PGSIZE)
+// Valid only inside the KERNBASE window (kernel image, kalloc
+// pages, page tables). Not for KSTACK or device addresses.
+#ifndef __ASSEMBLER__
+#define V2P(a) ((uint64)(a) - KERNBASE)
+#define P2V(a) ((void *)((char *)(a) + KERNBASE))
+#endif
 
-// map kernel stacks beneath the trampoline,
-// each surrounded by invalid guard pages.
-#define KSTACK(p) (TRAMPOLINE - ((p) + 1) * 2 * PGSIZE)
+// Same without casts, for assembly and integer constants.
+#define V2P_WO(x) ((x) - KERNBASE)
+#define P2V_WO(x) ((x) + KERNBASE)
 
-// User memory layout.
+// x86_64: device MMIO is above 2GB physical, out of reach of
+// P2V, so it gets its own window at DEVBASE + pa. Nothing is
+// mapped at DEVBASE itself; the LAPIC ends up at
+// 0xFFFFFFFFFEE00000. This range overlaps the top of the KERNBASE
+// window, which is unused because PHYSTOP is far below 2GB.
+#define DEVBASE   0xFFFFFFFF00000000
+#define DEV2V(pa) (DEVBASE + (pa))
+
+// ---------------------------------------------------------------
+// Kernel virtual addresses
+//
+// KERNBASE            -- P2V(0)
+// KERNLINK            -- kernel text and data
+// P2V(PHYSTOP)        -- KSTACKBASE
+// KSTACKBASE + 512KB  -- end of kernel stacks
+// DEV2V(IOAPIC_PA)    -- IOAPIC
+// DEV2V(LAPIC_PA)     -- LAPIC
+// ---------------------------------------------------------------
+
+// x86_64: kernel stacks start just above the RAM mapping
+// (riscv: beneath TRAMPOLINE). Each stack has an invalid guard
+// page below it. NPROC=64 stacks end at 0xFFFFFFFF88080000,
+// far below the device window.
+#define KSTACKBASE P2V_WO(PHYSTOP)
+#define KSTACK(p)  (KSTACKBASE + ((p) * 2 + 1) * PGSIZE)
+
+// ---------------------------------------------------------------
+// User virtual addresses
+//
 // Address zero first:
 //   text
 //   original data and bss
 //   fixed-size stack
 //   expandable heap
 //   ...
-//   TRAPFRAME (p->trapframe, used by the trampoline)
-//   TRAMPOLINE (the same page as in the kernel)
-#define TRAPFRAME (TRAMPOLINE - PGSIZE)
+//   USERTOP
+//
+// x86_64: no TRAMPOLINE or TRAPFRAME pages in user space;
+// the trapframe sits at the top of the kernel stack.
+// ---------------------------------------------------------------
+
+// x86_64: replaces TRAPFRAME as the user upper bound. The last
+// page below MAXVA stays unmapped so a later syscall/sysret path
+// can never return to a non-canonical address.
+#define USERTOP (MAXVA - PGSIZE)
