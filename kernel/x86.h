@@ -5,6 +5,16 @@
 // x86_64: rflags bits. riscv used sstatus.SIE for this.
 #define FL_IF 0x200 // interrupt enable
 
+// x86_64: control register and EFER bits used by entry.S to turn
+// on paging and long mode (riscv: satp mode field). See SDM
+// Vol. 3A 2.5 and 10.8.5 for the enable sequence.
+#define CR0_PG   (1L << 31) // paging
+#define CR4_PAE  (1L << 5)  // physical address extension; required by long mode
+
+#define MSR_EFER 0xC0000080 // extended feature enable register
+#define EFER_LME (1L << 8)  // long mode enable
+#define EFER_NXE (1L << 11) // makes PTE_XD usable; reserved (#PF) otherwise
+
 #ifndef __ASSEMBLER__
 
 // enable device interrupts
@@ -61,13 +71,15 @@ typedef uint64 *pagetable_t; // 512 PTEs
 // readable) and X is inverted into XD, which needs EFER.NXE=1.
 // Bits 6..8 differ by level (D/PS/G/PAT); xv6 leaves them 0.
 // Bit 7 must stay 0 in PDPTEs and PDEs, or the CPU treats the
-// entry as a 1GB/2MB page instead of a pointer to a table.
+// entry as a 1GB/2MB page instead of a pointer to a table. Only
+// entry.S's boot page table sets it (PTE_PS), for 2MB pages.
 #define PTE_P   (1L << 0)  // present
 #define PTE_RW  (1L << 1)  // Read/write
 #define PTE_US  (1L << 2)  // User/supervisor
 #define PTE_PWT (1L << 3)  // Page-level write-through
 #define PTE_PCD (1L << 4)  // Page-level cache disable
 #define PTE_A   (1L << 5)  // Accessed
+#define PTE_PS  (1L << 7)  // page size: 2MB page in a PDE (boot only)
 #define PTE_XD  (1L << 63) // execute-disable
 
 // x86_64: the address field starts at bit 12, the same place as in

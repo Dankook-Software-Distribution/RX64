@@ -12,7 +12,7 @@ OBJS = \
 # Set TOOLPREFIX to use a cross toolchain on another host.
 
 QEMU = qemu-system-x86_64
-MIN_QEMU_VERSION = 7.2
+MIN_QEMU_VERSION = 6.2
 
 CC = $(TOOLPREFIX)gcc
 LD = $(TOOLPREFIX)ld
@@ -52,8 +52,11 @@ endif
 # x86_64: kernel-only flags. -mcmodel=kernel because the kernel is
 # linked in the top 2GB; -mno-red-zone because interrupts push onto
 # the kernel stack below rsp; -fcf-protection=none because Ubuntu
-# gcc otherwise emits endbr64.
+# gcc otherwise emits endbr64; -fno-asynchronous-unwind-tables
+# because nothing in the kernel unwinds, and .eh_frame would land
+# in a LOAD segment (gdb uses .debug_frame from -g instead).
 $K/%.o: CFLAGS += -mcmodel=kernel -mno-red-zone -fcf-protection=none
+$K/%.o: CFLAGS += -fno-asynchronous-unwind-tables
 
 LDFLAGS = -z max-page-size=4096
 
