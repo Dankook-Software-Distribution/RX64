@@ -1,21 +1,23 @@
-        # qemu -kernel loads the kernel at 0x80000000
-        # and causes each hart (i.e. CPU) to jump there.
-        # kernel.ld causes the following code to
-        # be placed at 0x80000000.
-.section .text
-.global _entry
+#include "kernel/x86.h"
+#include "kernel/memlayout.h"
+
+        .section .multiboot, "a"
+        .align 4
+mbhdr:
+        .long 0x1BADB002                # magic number
+        .long 1<<16                     # flags
+        .long -(0x1BADB002 + (1<<16))   # checksum: magic number + flags + checksum = 0
+        .long V2P_WO(mbhdr)             # header_addr: where this header lands
+        .long V2P_WO(mbhdr)             # load_addr: start loading here
+        .long V2P_WO(edata)             # load_end_addr: end of .data
+        .long V2P_WO(end)               # bss_end_addr: end of .bss
+        .long V2P_WO(_entry)            # entry_addr: jump here after loading
+        
+        .text
+        .code32
+        .global _entry
 _entry:
-        # set up a stack for C.
-        # stack0 is declared in start.c,
-        # with a 4096-byte stack per CPU.
-        # sp = stack0 + ((hartid + 1) * 4096)
-        la sp, stack0
-        li a0, 1024*4
-        csrr a1, mhartid
-        addi a1, a1, 1
-        mul a0, a0, a1
-        add sp, sp, a0
-        # jump to start() in start.c
-        call start
+        # nothing to do yet
 spin:
-        j spin
+        hlt
+        jmp spin

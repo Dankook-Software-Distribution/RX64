@@ -1,22 +1,21 @@
 // Saved registers for kernel context switches.
+// x86_64: riscv saved ra and sp; here rip is the return address
+// that call pushed on the stack, so swtch pops it into rip and
+// saves rsp as it is after the pop. swtch.S uses these offsets.
 struct context {
-  uint64 ra;
-  uint64 sp;
+  /*  0 */ uint64 rip;
+  /*  8 */ uint64 rsp;
 
   // callee-saved
-  uint64 s0;
-  uint64 s1;
-  uint64 s2;
-  uint64 s3;
-  uint64 s4;
-  uint64 s5;
-  uint64 s6;
-  uint64 s7;
-  uint64 s8;
-  uint64 s9;
-  uint64 s10;
-  uint64 s11;
+  /* 16 */ uint64 rbx;
+  /* 24 */ uint64 rbp;
+  /* 32 */ uint64 r12;
+  /* 40 */ uint64 r13;
+  /* 48 */ uint64 r14;
+  /* 56 */ uint64 r15;
 };
+_Static_assert(sizeof(struct context) == 64,
+               "context layout must match swtch.S");
 
 // Per-CPU state.
 struct cpu {
@@ -28,53 +27,52 @@ struct cpu {
 
 extern struct cpu cpus[NCPU];
 
-// per-process data for the trap handling code in trampoline.S.
-// sits in a page by itself just under the trampoline page in the
-// user page table. not specially mapped in the kernel page table.
-// uservec in trampoline.S saves user registers in the trapframe,
-// then initializes registers from the trapframe's
-// kernel_sp, kernel_hartid, kernel_satp, and jumps to kernel_trap.
-// prepare_return() and userret in trampoline.S set up
-// the trapframe's kernel_*, restore user registers from the
-// trapframe, switch to the user page table, and enter user space.
+// registers saved on a trap, at the top of the process's kernel
+// stack. built from the top down: the CPU pushes ss..rip (and err
+// for some vectors), the stub in vectors.S pushes trapno (and a
+// zero err otherwise), and alltraps in trapasm.S pushes r15..rax.
+// trapret pops it in reverse and finishes with iretq.
+//
+// x86_64: riscv kept the trapframe in its own page mapped just
+// under the trampoline in the user page table, with kernel_satp,
+// kernel_sp, kernel_trap and kernel_hartid for uservec to load.
+// none of that is needed here: the CPU takes the kernel stack
+// from TSS.rsp0 and the handler from the IDT, and cr3 stays the
+// same because every user page table also maps the kernel.
+// layout follows SDM Vol. 3A Figure 7-9 for rip..ss; trapasm.S
+// uses these offsets as numbers, so keep the two in sync.
 struct trapframe {
-  /*   0 */ uint64 kernel_satp;   // kernel page table
-  /*   8 */ uint64 kernel_sp;     // top of process's kernel stack
-  /*  16 */ uint64 kernel_trap;   // usertrap()
-  /*  24 */ uint64 epc;           // saved user program counter
-  /*  32 */ uint64 kernel_hartid; // saved kernel tp
-  /*  40 */ uint64 ra;
-  /*  48 */ uint64 sp;
-  /*  56 */ uint64 gp;
-  /*  64 */ uint64 tp;
-  /*  72 */ uint64 t0;
-  /*  80 */ uint64 t1;
-  /*  88 */ uint64 t2;
-  /*  96 */ uint64 s0;
-  /* 104 */ uint64 s1;
-  /* 112 */ uint64 a0;
-  /* 120 */ uint64 a1;
-  /* 128 */ uint64 a2;
-  /* 136 */ uint64 a3;
-  /* 144 */ uint64 a4;
-  /* 152 */ uint64 a5;
-  /* 160 */ uint64 a6;
-  /* 168 */ uint64 a7;
-  /* 176 */ uint64 s2;
-  /* 184 */ uint64 s3;
-  /* 192 */ uint64 s4;
-  /* 200 */ uint64 s5;
-  /* 208 */ uint64 s6;
-  /* 216 */ uint64 s7;
-  /* 224 */ uint64 s8;
-  /* 232 */ uint64 s9;
-  /* 240 */ uint64 s10;
-  /* 248 */ uint64 s11;
-  /* 256 */ uint64 t3;
-  /* 264 */ uint64 t4;
-  /* 272 */ uint64 t5;
-  /* 280 */ uint64 t6;
+  // pushed by alltraps
+  /*   0 */ uint64 rax;
+  /*   8 */ uint64 rbx;
+  /*  16 */ uint64 rcx;
+  /*  24 */ uint64 rdx;
+  /*  32 */ uint64 rbp;
+  /*  40 */ uint64 rsi;
+  /*  48 */ uint64 rdi;
+  /*  56 */ uint64 r8;
+  /*  64 */ uint64 r9;
+  /*  72 */ uint64 r10;
+  /*  80 */ uint64 r11;
+  /*  88 */ uint64 r12;
+  /*  96 */ uint64 r13;
+  /* 104 */ uint64 r14;
+  /* 112 */ uint64 r15;
+
+  // pushed by the vector stub in vectors.S
+  /* 120 */ uint64 trapno;
+  /* 128 */ uint64 err;         // pushed by the CPU for some vectors
+
+  // pushed by the CPU
+  /* 136 */ uint64 rip;
+  /* 144 */ uint16 cs;          // only low 16 bits are meaningful
+            uint16 padding[3];
+  /* 152 */ uint64 rflags;
+  /* 160 */ uint64 rsp;
+  /* 168 */ uint64 ss;
 };
+_Static_assert(sizeof(struct trapframe) == 176,
+               "trapframe layout must match trapasm.S");
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
@@ -96,7 +94,7 @@ struct proc {
   uint64 kstack;               // Virtual address of kernel stack
   uint64 sz;                   // Size of process memory (bytes)
   pagetable_t pagetable;       // User page table
-  struct trapframe *trapframe; // data page for trampoline.S
+  struct trapframe *trapframe; // top of kstack; x86_64: was a page for trampoline.S
   struct context context;      // swtch() here to run process
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
