@@ -1,3 +1,17 @@
+RX64: xv6 on x86_64
+
+RX64 ports xv6-riscv to x86_64 in two versions, to compare how the
+same kernel looks under two designs on the same hardware.
+
+  x86_64        Conventional x86_64 design: higher-half kernel, no
+                trampoline, trap frame on the kernel stack.
+  x86_64-tramp  xv6-riscv design kept as is: trampoline page and
+                separate user/kernel page tables. (planned)
+
+The original xv6 README follows.
+
+----------------------------------------------------------------------
+
 xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
 Version 6 (v6).  xv6 loosely follows the structure and style of v6,
 but is implemented for a modern RISC-V multiprocessor using ANSI C.
