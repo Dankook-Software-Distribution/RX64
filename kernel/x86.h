@@ -15,6 +15,10 @@
 #define EFER_LME (1L << 8)  // long mode enable
 #define EFER_NXE (1L << 11) // makes PTE_XD usable; reserved (#PF) otherwise
 
+// x86_64: segment selectors
+// selector = GDT index * 8; low 3 bits are TI and RPL, 0 for kernel.
+#define KCSEG (2 << 3) // kernel 64-bit code, GDT index 2
+
 #ifndef __ASSEMBLER__
 
 // enable device interrupts
