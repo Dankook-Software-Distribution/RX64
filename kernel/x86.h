@@ -57,6 +57,19 @@ r_sp()
   return x;
 }
 
+// write a byte to an I/O port
+// x86_64: devices like COM1 live in a separate I/O port space,
+// reached only with in/out instructions (riscv: the UART was
+// memory-mapped, so plain loads and stores worked).
+// outb takes the byte in al and the port in dx or as an 8-bit
+// immediate: "a" puts data in al, "Nd" puts port in dx or an
+// immediate. both are inputs only, so there are no outputs.
+static inline void
+outb(uint16 port, uint8 data)
+{
+  asm volatile("outb %0, %1" : : "a"(data), "Nd"(port));
+}
+
 typedef uint64 pte_t;
 typedef uint64 *pagetable_t; // 512 PTEs
 
