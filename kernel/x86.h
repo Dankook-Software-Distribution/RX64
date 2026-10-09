@@ -16,8 +16,20 @@
 #define EFER_NXE (1L << 11) // makes PTE_XD usable; reserved (#PF) otherwise
 
 // x86_64: segment selectors
-// selector = GDT index * 8; low 3 bits are TI and RPL, 0 for kernel.
-#define KCSEG (2 << 3) // kernel 64-bit code, GDT index 2
+// selector = GDT index * 8; low 3 bits are TI and RPL, 0 here.
+// users add RPL 3 themselves (UCSEG | 3, UDSEG | 3).
+// the order is fixed by syscall/sysret, as in Linux: syscall
+// loads CS = STAR[47:32] and SS = that + 8, sysret loads
+// SS = STAR[63:48] + 8 and CS = STAR[63:48] + 16. so with
+// STAR[47:32] = KCSEG and STAR[63:48] = KDSEG, kernel data must
+// follow kernel code and user code must follow user data.
+// Linux's 32-bit compat slots are left out; there is no
+// 32-bit user mode.
+#define KCSEG (1 << 3) // kernel 64-bit code, GDT index 1
+#define KDSEG (2 << 3) // kernel data, GDT index 2 (syscall's SS)
+#define UDSEG (3 << 3) // user data, GDT index 3
+#define UCSEG (4 << 3) // user 64-bit code, GDT index 4
+#define NSEGS 7        // null, 4 segments above, TSS (16 bytes, 2 slots)
 
 #ifndef __ASSEMBLER__
 
@@ -68,6 +80,12 @@ static inline void
 outb(uint16 port, uint8 data)
 {
   asm volatile("outb %0, %1" : : "a"(data), "Nd"(port));
+}
+
+static inline void
+lgdt()
+{
+
 }
 
 typedef uint64 pte_t;

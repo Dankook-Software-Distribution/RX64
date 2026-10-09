@@ -57,7 +57,7 @@ _entry:
         # set while paging is off, and CR3 must hold the page table
         # before CR0.PG turns paging on; otherwise #GP or #PF.
         # LA57 stays 0, so this is 4-level paging.
-        lgdt V2P_WO(gdtdesc)            # physical: paging is still off
+        lgdt V2P_WO(bootgdtdesc)        # physical: paging is still off
 
         movl %cr4, %eax
         orl $CR4_PAE, %eax
@@ -172,15 +172,15 @@ pd:
         # jump into 64-bit code needs a code segment with L=1; data
         # segments are not needed since ds/es/ss can be null in
         # 64-bit mode. seginit() replaces this with the real GDT.
-        # Slot 1 is empty so KCSEG stays 0x10 as in the final GDT.
+        # The code segment sits in slot 1, as in the final GDT, so
+        # KCSEG is the same selector in both.
         .data
         .balign 8
-gdt:
+bootgdt:
         .quad 0                         # 0x00: null (required)
-        .quad 0                         # 0x08: unused
-        .quad 0x00209A0000000000        # 0x10: KCSEG, 64-bit kernel code
-gdt_end:
+        .quad 0x00209A0000000000        # 0x08: KCSEG, 64-bit kernel code
+bootgdt_end:
 
-gdtdesc:
-        .word gdt_end - gdt - 1         # limit: size of GDT - 1
-        .long V2P_WO(gdt)               # base: physical, paging is off
+bootgdtdesc:
+        .word bootgdt_end - bootgdt - 1 # limit: size of GDT - 1
+        .long V2P_WO(bootgdt)           # base: physical, paging is off
