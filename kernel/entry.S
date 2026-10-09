@@ -97,6 +97,32 @@ start64:
         movb $'B', %al
         outb %al, %dx
 
+        # x86_64: jump to the high address the kernel is linked at
+        # (riscv: linked at 0x80000000 and run there, nothing to do).
+        # C code built with -mcmodel=kernel assumes high addresses,
+        # and the identity map goes away once main switches to the
+        # real kernel page table. a plain jmp is RIP-relative and
+        # would land in the low copy, so jump through a register
+        # holding the absolute high address.
+        movabs $high64, %rax
+        jmp *%rax
+
+high64:
+        movb $'C', %al
+        outb %al, %dx
+
+        # move the stack to bootstacktop's high address for the same
+        # reason. bootstacktop is 16-byte aligned, as the SysV ABI
+        # wants rsp before a call. ebp = 0 ends the frame-pointer
+        # chain again.
+        movabs $bootstacktop, %rsp
+        xorl %ebp, %ebp
+
+        # call is RIP-relative too, so it must come after the jump
+        # to reach the high main. main should not return; if it
+        # does, fall into spin.
+        call main
+
 spin:
         hlt
         jmp spin
