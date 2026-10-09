@@ -82,10 +82,24 @@ outb(uint16 port, uint8 data)
   asm volatile("outb %0, %1" : : "a"(data), "Nd"(port));
 }
 
+// load the GDT register
+// x86_64: riscv has no segmentation, so nothing corresponds.
+// lgdt reads a 10-byte operand from memory: a 2-byte limit
+// (size - 1) and an 8-byte base, the GDT's virtual address.
+// packed drops the 6 bytes of padding the compiler would put
+// after limit to align base; without it lgdt reads a bad base.
+// "m" passes desc itself as a memory operand.
 static inline void
-lgdt()
+lgdt(uint64 *gdt, int size)
 {
+  struct gdtdesc {
+    uint16 limit;
+    uint64 base;
+  } __attribute__((packed));
 
+  struct gdtdesc desc = { size - 1, (uint64)gdt };
+
+  asm volatile("lgdt %0" : : "m"(desc));
 }
 
 typedef uint64 pte_t;

@@ -5,7 +5,8 @@ U=user
 # is ported, so the kernel builds and boots at every step.
 OBJS = \
   $K/entry.o \
-  $K/main.o
+  $K/main.o \
+  $K/gdt.o
 
 # x86_64: the host gcc/binutils target x86_64 already, so no
 # cross-compiler prefix is needed (riscv searched for riscv64-*-).

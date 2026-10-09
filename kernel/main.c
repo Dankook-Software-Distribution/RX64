@@ -2,6 +2,7 @@
 #include "param.h"
 #include "x86.h"
 #include "memlayout.h"
+#include "defs.h"
 
 volatile static int started = 0;
 
@@ -11,11 +12,14 @@ volatile static int started = 0;
 void
 main()
 {
+  seginit();       // kernel GDT at its high address
+
   char *test = "\nHello, world!\n";
 
   while (*test != '\0') {
     outb(COM1, *test);
     test++;
   }
+
   for (;;) ;
 }
