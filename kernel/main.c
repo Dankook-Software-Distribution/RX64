@@ -14,12 +14,11 @@ main()
 {
   seginit();       // kernel GDT at its high address
 
-  char *test = "\nHello, world!\n";
-
-  while (*test != '\0') {
-    outb(COM1, *test);
-    test++;
-  }
+  earlyputs("\nHello, world!\n");
+  earlyputx(0x1234abcd);
+  earlyputs("\n");
+  earlyputx((uint64)main);
+  earlyputs("\n");
 
   for (;;) ;
 }
