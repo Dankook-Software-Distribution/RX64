@@ -13,6 +13,7 @@ void
 main()
 {
   seginit();       // kernel GDT at its high address
+  idtinit();       // interrupt descriptor table
 
   earlyputs("\nHello, world!\n");
   earlyputx(0x1234abcd);

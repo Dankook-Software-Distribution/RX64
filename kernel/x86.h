@@ -102,6 +102,24 @@ lgdt(uint64 *gdt, int size)
   asm volatile("lgdt %0" : : "m"(desc));
 }
 
+// load the interrupt descriptor table register
+// x86_64: replaces riscv's write to stvec. The operand has the
+// same 10-byte form as lgdt's: limit (size - 1) and the IDT's
+// virtual address. idt is void * because struct gate_struct is
+// private to idt.c.
+static inline void
+lidt(void *idt, int size)
+{
+  struct idtdesc {
+    uint16 limit;
+    uint64 base;
+  } __attribute__((packed));
+
+  struct idtdesc desc = { size - 1, (uint64)idt };
+
+  asm volatile("lidt %0" : : "m"(desc));
+}
+
 typedef uint64 pte_t;
 typedef uint64 *pagetable_t; // 512 PTEs
 
