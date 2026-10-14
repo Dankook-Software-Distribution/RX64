@@ -120,6 +120,18 @@ lidt(void *idt, int size)
   asm volatile("lidt %0" : : "m"(desc));
 }
 
+// read the page-fault address
+// x86_64: on a page fault the CPU puts the virtual address it
+// failed to access in cr2 (riscv: stval). cr2 is not saved in
+// the trapframe, and a later page fault overwrites it.
+static inline uint64
+read_cr2()
+{
+  uint64 x;
+  asm volatile("mov %%cr2, %0" : "=r"(x));
+  return x;
+}
+
 typedef uint64 pte_t;
 typedef uint64 *pagetable_t; // 512 PTEs
 

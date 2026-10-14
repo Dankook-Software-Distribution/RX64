@@ -10,7 +10,8 @@ OBJS = \
   $K/early.o \
   $K/idt.o \
   $K/vectors.o \
-  $K/trapasm.o
+  $K/trapasm.o \
+  $K/trap.o
 
 # x86_64: the host gcc/binutils target x86_64 already, so no
 # cross-compiler prefix is needed (riscv searched for riscv64-*-).
