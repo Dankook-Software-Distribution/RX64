@@ -4,7 +4,7 @@
 #include "param.h"
 #include "memlayout.h"
 #include "spinlock.h"
-#include "riscv.h"
+#include "x86.h"
 #include "proc.h"
 #include "defs.h"
 
@@ -25,10 +25,13 @@ acquire(struct spinlock *lk)
   if (holding(lk))
     panic("acquire");
 
-  // On RISC-V, __atomic_exchange_n turns into an atomic swap:
-  //   a5 = 1
-  //   s1 = &lk->locked
-  //   amoswap.w.aq a5, a5, (s1)
+  // x86_64: __atomic_exchange_n turns into xchg (riscv:
+  // amoswap.w.aq):
+  //   eax = 1
+  //   rbx = &lk->locked
+  //   xchg %eax, (%rbx)
+  // xchg with a memory operand is atomic even without a lock
+  // prefix.
   //
   // Passing __ATOMIC_ACQUIRE to __atomic_exchange_n tells
   // the C compiler and the processor to not move loads or stores
@@ -56,10 +59,9 @@ release(struct spinlock *lk)
   // implies that an assignment might be implemented with
   // multiple store instructions.
   //
-  // On RISC-V, __atomic_store_n turns into a single atomic store:
-  //   s1 = &lk->locked
-  //   fence rw,w
-  //   sw zero,0(s1)
+  // x86_64: __atomic_store_n turns into a single plain store
+  // (riscv: fence rw,w, then sw):
+  //   movl $0, (%rbx)
   //
   // The __ATOMIC_RELEASE argument to __atomic_store_n tells the
   // the C compiler and the CPU to not move loads or stores past
@@ -68,8 +70,10 @@ release(struct spinlock *lk)
   // and that loads in the critical section occur strictly before
   // the lock is released.
   //
-  // On RISC-V, this generates a fence instruction before the store:
-  //   fence rw,w
+  // x86_64: no fence is needed. x86 does not reorder a store
+  // with earlier loads or stores (SDM Vol. 3A 11.2.2), so
+  // __ATOMIC_RELEASE only keeps the compiler from moving memory
+  // accesses past the store.
   __atomic_store_n(&lk->locked, 0, __ATOMIC_RELEASE);
 
   pop_off();
@@ -94,8 +98,13 @@ push_off(void)
 {
   // disable interrupts to prevent an involuntary context
   // switch while using mycpu().
-  uint64 flags = rc_sstatus(SSTATUS_SIE);
-  int old = !!(flags & SSTATUS_SIE);
+  // x86_64: riscv read and cleared sstatus.SIE in one csrrc.
+  // x86 has no such instruction, so read rflags.IF first, then
+  // cli, as Linux's local_irq_save() does. Reading after cli
+  // would always see IF = 0. An interrupt between the two is
+  // harmless: iretq restores rflags.
+  int old = intr_get();
+  intr_off();
 
   if (mycpu()->noff == 0)
     mycpu()->intena = old;

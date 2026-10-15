@@ -12,12 +12,20 @@
 
 static char digits[] = "0123456789abcdef";
 
+// print one character. Takes an int like consputc(), so that
+// printk.c can use it in consputc()'s place for now.
+void
+earlyputc(int c)
+{
+  outb(COM1, c);
+}
+
 // print a NUL-terminated string.
 void
 earlyputs(char *s)
 {
   while (*s) {
-    outb(COM1, *s);
+    earlyputc(*s);
     s++;
   }
 }

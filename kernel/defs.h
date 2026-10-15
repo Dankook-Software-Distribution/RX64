@@ -188,6 +188,7 @@ void            virtio_disk_intr(void);
 // early.c
 void            earlyputs(char *);
 void            earlyputx(uint64);
+void            earlyputc(int);
 
 // idt.c
 void            idtinit(void);

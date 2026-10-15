@@ -11,9 +11,15 @@
 #include "fs.h"
 #include "file.h"
 #include "memlayout.h"
-#include "riscv.h"
+#include "x86.h"
 #include "defs.h"
 #include "proc.h"
+
+// x86_64: print through early.c until the console is up
+// (riscv: consputc() from the start). console.c needs sleep(),
+// wakeup() and copyin/copyout, which come with processes, so it
+// cannot be built yet. Remove this line once console.c is in.
+#define consputc earlyputc
 
 volatile int panicking = 0; // printing a panic message
 volatile int panicked = 0;  // spinning forever at end of a panic
