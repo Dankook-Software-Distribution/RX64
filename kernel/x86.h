@@ -132,6 +132,12 @@ read_cr2()
   return x;
 }
 
+static inline void
+write_cr3(uint64 pa)
+{
+  asm volatile("mov %0, %%cr3" : : "r"(pa) : "memory");
+}
+
 typedef uint64 pte_t;
 typedef uint64 *pagetable_t; // 512 PTEs
 

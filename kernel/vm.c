@@ -1,8 +1,8 @@
 #include "param.h"
 #include "types.h"
+#include "x86.h"
 #include "memlayout.h"
 #include "elf.h"
-#include "riscv.h"
 #include "defs.h"
 #include "spinlock.h"
 #include "proc.h"
@@ -14,8 +14,6 @@
 pagetable_t kernel_pagetable;
 
 extern char etext[]; // kernel.ld sets this to end of kernel code.
-
-extern char trampoline[]; // trampoline.S
 
 // Make a direct-map page table for the kernel.
 pagetable_t
@@ -101,7 +99,7 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
   if (va >= MAXVA)
     panic("walk");
 
-  for (int level = 2; level > 0; level--) {
+  for (int level = 3; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
     if (*pte & PTE_V) {
       pagetable = (pagetable_t)PTE2PA(*pte);
@@ -173,6 +171,8 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   }
   return 0;
 }
+
+#if 0
 
 // create an empty user page table.
 // returns 0 if out of memory.
@@ -489,3 +489,5 @@ ismapped(pagetable_t pagetable, uint64 va)
   }
   return 0;
 }
+
+#endif
