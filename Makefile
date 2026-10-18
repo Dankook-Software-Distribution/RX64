@@ -15,7 +15,8 @@ OBJS = \
   $K/string.o \
   $K/printk.o \
   $K/spinlock.o \
-  $K/proc.o
+  $K/proc.o \
+  $K/kalloc.o
 
 # x86_64: the host gcc/binutils target x86_64 already, so no
 # cross-compiler prefix is needed (riscv searched for riscv64-*-).

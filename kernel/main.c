@@ -15,12 +15,7 @@ main()
   seginit();       // kernel GDT at its high address
   idtinit();       // interrupt descriptor table
   printkinit();    // lock for printk
-
-  earlyputs("\nHello, world!\n");
-  earlyputx(0x1234abcd);
-  earlyputs("\n");
-  earlyputx((uint64)main);
-  earlyputs("\n");
+  kinit();         // physical page allocator
 
   for (;;) ;
 }

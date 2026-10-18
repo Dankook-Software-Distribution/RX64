@@ -1,12 +1,18 @@
 // Physical memory allocator, for user processes,
 // kernel stacks, page-table pages,
 // and pipe buffers. Allocates whole 4096-byte pages.
+//
+// x86_64: pages are handed out and taken back as kernel virtual
+// addresses in the KERNBASE window (riscv: RAM was identity-
+// mapped, so a page's physical and virtual addresses were the
+// same). Despite the name, the pa arguments below are such
+// addresses; callers use V2P() to put a page in a PTE or CR3.
 
 #include "types.h"
 #include "param.h"
+#include "x86.h"
 #include "memlayout.h"
 #include "spinlock.h"
-#include "riscv.h"
 #include "defs.h"
 
 void freerange(void *pa_start, void *pa_end);
@@ -23,11 +29,15 @@ struct {
   struct run *freelist;
 } kmem;
 
+// x86_64: PHYSTOP is a physical address now, so convert it to
+// match end, which kernel.ld places at a high address. entry.S's
+// boot page table maps the first 1GB at KERNBASE, which covers
+// this range, so kalloc works before kvminit() runs.
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void *)PHYSTOP);
+  freerange(end, (void *)P2V(PHYSTOP));
 }
 
 void
@@ -48,7 +58,9 @@ kfree(void *pa)
 {
   struct run *r;
 
-  if (((uint64)pa % PGSIZE) != 0 || (char *)pa < end || (uint64)pa >= PHYSTOP)
+  // x86_64: the same range as kinit(), in virtual addresses.
+  if (((uint64)pa % PGSIZE) != 0 || (char *)pa < end ||
+      (char *)pa >= (char *)P2V(PHYSTOP))
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
