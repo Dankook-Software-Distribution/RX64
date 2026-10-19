@@ -101,13 +101,13 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
 
   for (int level = 3; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
-    if (*pte & PTE_V) {
-      pagetable = (pagetable_t)PTE2PA(*pte);
+    if (*pte & PTE_P) {
+      pagetable = (pagetable_t)P2V(PTE2PA(*pte));
     } else {
       if (!alloc || (pagetable = (pde_t *)kalloc()) == 0)
         return 0;
       memset(pagetable, 0, PGSIZE);
-      *pte = PA2PTE(pagetable) | PTE_V;
+      *pte = PA2PTE(V2P(pagetable)) | PTE_P;
     }
   }
   return &pagetable[PX(0, va)];
@@ -128,7 +128,7 @@ walkaddr(pagetable_t pagetable, uint64 va)
   pte = walk(pagetable, va, 0);
   if (pte == 0)
     return 0;
-  if ((*pte & PTE_V) == 0)
+  if ((*pte & PTE_P) == 0)
     return 0;
   if ((*pte & PTE_U) == 0)
     return 0;
@@ -161,9 +161,9 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for (;;) {
     if ((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if (*pte & PTE_V)
+    if (*pte & PTE_P)
       panic("mappages: remap");
-    *pte = PA2PTE(pa) | perm | PTE_V;
+    *pte = PA2PTE(pa) | perm | PTE_P;
     if (a == last)
       break;
     a += PGSIZE;
