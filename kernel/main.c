@@ -16,6 +16,8 @@ main()
   idtinit();       // interrupt descriptor table
   printkinit();    // lock for printk
   kinit();         // physical page allocator
+  kvminit();       // create kernel page table
+  kvminithart();   // turn on paging
 
   for (;;) ;
 }

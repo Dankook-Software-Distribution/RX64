@@ -187,3 +187,16 @@ typedef uint64 *pagetable_t; // 512 PTEs
 // so the lower half ends at 1<<47; 0x0000800000000000 is
 // non-canonical and faults with #GP.
 #define MAXVA (1L << (9 + 9 + 9 + 9 + 12 - 1))
+
+// x86_64: a virtual address is canonical when bits 63..47 are all
+// equal, i.e. va is bit 47 sign-extended (riscv Sv39 instead
+// required bits 63..39 to be zero for walk()). Using a
+// non-canonical address faults with #GP, and PX() ignores bits
+// 63..48, so walk() would map such an address at the wrong place.
+// CANONICAL_ADDRESS() sign-extends bit (bits - 1): shift left as
+// unsigned, then right as signed so the top fills with that bit.
+// Names follow Linux's __canonical_address() and
+// __is_canonical_address().
+#define CANONICAL_ADDRESS(va, bits) \
+  ((uint64)((int64)((uint64)(va) << (64 - (bits))) >> (64 - (bits))))
+#define IS_CANONICAL_ADDRESS(va) (CANONICAL_ADDRESS(va, 48) == (uint64)(va))
