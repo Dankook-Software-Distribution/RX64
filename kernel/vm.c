@@ -28,8 +28,20 @@ kvmmake(void)
   // (riscv: identity map), so each mapping passes the virtual
   // address and V2P() of it. COM1 and IDE are I/O ports and need
   // no mapping (riscv: UART0, VIRTIO0, PLIC), and there is no
-  // trampoline. Kernel stacks come back with processes, and the
-  // LAPIC and IOAPIC with interrupts.
+  // trampoline. Kernel stacks come back with processes.
+
+  // IOAPIC and LAPIC registers, one page each.
+  // x86_64: these replace the PLIC. They are MMIO above 2GB
+  // physical, outside the KERNBASE window, so they go in the
+  // device window at DEV2V(pa), and pa is already physical (no
+  // V2P). Device registers change on their own and writes to
+  // them are commands (e.g. LAPIC EOI), so PCD | PWT makes the
+  // pages uncacheable, as Linux's ioremap() does; XD because
+  // they are never code.
+  kvmmap(kpgtbl, DEV2V(IOAPIC_PA), IOAPIC_PA, PGSIZE,
+         PTE_RW | PTE_XD | PTE_PCD | PTE_PWT);
+  kvmmap(kpgtbl, DEV2V(LAPIC_PA), LAPIC_PA, PGSIZE,
+         PTE_RW | PTE_XD | PTE_PCD | PTE_PWT);
 
   // map kernel text executable and read-only.
   // x86_64: x86 has no R bit (present implies readable) and
