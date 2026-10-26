@@ -193,5 +193,8 @@ void            earlyputc(int);
 // idt.c
 void            idtinit(void);
 
+// i8259.c
+void            picinit(void);
+
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x) / sizeof((x)[0]))

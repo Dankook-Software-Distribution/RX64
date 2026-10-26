@@ -18,6 +18,7 @@ main()
   kinit();         // physical page allocator
   kvminit();       // create kernel page table
   kvminithart();   // turn on paging
+  picinit();       // mask the legacy 8259 PICs
 
   for (;;) ;
 }
