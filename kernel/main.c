@@ -19,6 +19,7 @@ main()
   kvminit();       // create kernel page table
   kvminithart();   // turn on paging
   picinit();       // mask the legacy 8259 PICs
+  lapicinit();     // local APIC and its timer
 
   for (;;) ;
 }

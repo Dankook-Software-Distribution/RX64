@@ -196,5 +196,9 @@ void            idtinit(void);
 // i8259.c
 void            picinit(void);
 
+// lapic.c
+void            lapicinit(void);
+void            lapiceoi(void);
+
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x) / sizeof((x)[0]))

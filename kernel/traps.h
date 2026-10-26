@@ -28,3 +28,14 @@
 #define T_VE    20  // virtualization exception
 #define T_CP    21  // control protection, err
 //                  22-31 reserved
+
+// Vectors 32-255 are free for software. Device interrupts start
+// at T_IRQ0; IRQ n arrives as vector T_IRQ0 + n.
+#define T_IRQ0      32
+
+#define IRQ_TIMER    0  // LAPIC timer
+#define IRQ_COM1     4  // serial port, through the IOAPIC
+#define IRQ_IDE     14  // primary IDE disk, through the IOAPIC
+
+// LAPIC spurious-interrupt vector, as Linux's SPURIOUS_APIC_VECTOR.
+#define T_SPURIOUS 0xFF
