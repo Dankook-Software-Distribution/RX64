@@ -20,6 +20,7 @@ main()
   kvminithart();   // turn on paging
   picinit();       // mask the legacy 8259 PICs
   lapicinit();     // local APIC and its timer
+  ioapicinit();    // I/O APIC, every pin masked
   intr_on();       // TEST(4-d): take timer ticks; moves to the scheduler
 
   for (;;) ;

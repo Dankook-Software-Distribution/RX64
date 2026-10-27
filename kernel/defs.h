@@ -200,5 +200,9 @@ void            picinit(void);
 void            lapicinit(void);
 void            lapiceoi(void);
 
+// ioapic.c
+void            ioapicinit(void);
+void            ioapicenable(int, int);
+
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x) / sizeof((x)[0]))
