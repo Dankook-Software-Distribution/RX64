@@ -28,7 +28,7 @@ kvmmake(void)
   // (riscv: identity map), so each mapping passes the virtual
   // address and V2P() of it. COM1 and IDE are I/O ports and need
   // no mapping (riscv: UART0, VIRTIO0, PLIC), and there is no
-  // trampoline. Kernel stacks come back with processes.
+  // trampoline.
 
   // IOAPIC and LAPIC registers, one page each.
   // x86_64: these replace the PLIC. They are MMIO above 2GB
@@ -54,6 +54,9 @@ kvmmake(void)
   // x86_64: XD keeps data from being executed.
   kvmmap(kpgtbl, (uint64)etext, V2P(etext),
          (uint64)P2V(PHYSTOP) - (uint64)etext, PTE_RW | PTE_XD);
+
+  // allocate and map a kernel stack for each process.
+  proc_mapstacks(kpgtbl);
 
   return kpgtbl;
 }

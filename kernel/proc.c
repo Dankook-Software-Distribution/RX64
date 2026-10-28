@@ -8,6 +8,34 @@
 
 struct cpu cpus[NCPU];
 
+struct proc proc[NPROC];
+
+// Allocate a page for each process's kernel stack.
+// Map it high in memory, followed by an invalid
+// guard page.
+// x86_64: the stacks sit just above the RAM mapping at KSTACKBASE
+// (riscv: beneath TRAMPOLINE), so an overflow faults on the guard
+// page instead of silently overwriting the direct map, like
+// Linux's VMAP_STACK. kalloc() returns a kernel virtual address
+// (riscv: the physical address, hence its name pa), so the
+// variable is named stack and the PTE gets V2P(stack). Stacks
+// are writable and never executed: PTE_RW | PTE_XD (riscv:
+// PTE_R | PTE_W; x86 has no R bit, and XD forbids execution
+// where riscv's X would allow it).
+void
+proc_mapstacks(pagetable_t kpgtbl)
+{
+  struct proc *p;
+
+  for (p = proc; p < &proc[NPROC]; p++) {
+    char *stack = kalloc();
+    if (stack == 0)
+      panic("kalloc");
+    uint64 va = KSTACK((int)(p - proc));
+    kvmmap(kpgtbl, va, V2P(stack), PGSIZE, PTE_RW | PTE_XD);
+  }
+}
+
 // Must be called with interrupts disabled,
 // to prevent race with process being moved
 // to a different CPU.
