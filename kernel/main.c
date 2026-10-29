@@ -18,9 +18,11 @@ main()
   kinit();         // physical page allocator
   kvminit();       // create kernel page table
   kvminithart();   // turn on paging
+  procinit();      // process table
   picinit();       // mask the legacy 8259 PICs
   lapicinit();     // local APIC and its timer
   ioapicinit();    // I/O APIC, every pin masked
+  allocproc_test(); // TEST(5-c-1): print two new procs
   intr_on();       // TEST(4-d): take timer ticks; moves to the scheduler
 
   for (;;) ;
