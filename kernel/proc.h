@@ -23,6 +23,13 @@ struct cpu {
   struct context context; // swtch() here to enter scheduler().
   int noff;               // Depth of push_off() nesting.
   int intena;             // Were interrupts enabled before push_off()?
+
+  // x86_64: riscv has no segmentation. Each CPU needs its own
+  // TSS (sp0 is that CPU's current kernel stack) and so its own
+  // TSS descriptor; ltr marks the descriptor busy, so CPUs
+  // cannot share one, and the GDT that holds it is per CPU too.
+  uint64 gdt[NSEGS];      // This CPU's GDT, from seginit().
+  struct x86_hw_tss tss;  // This CPU's TSS; sp0 is set on each switch.
 };
 
 extern struct cpu cpus[NCPU];

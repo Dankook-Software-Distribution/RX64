@@ -29,6 +29,7 @@
 #define KDSEG (2 << 3) // kernel data, GDT index 2 (syscall's SS)
 #define UDSEG (3 << 3) // user data, GDT index 3
 #define UCSEG (4 << 3) // user 64-bit code, GDT index 4
+#define TSSSEG (5 << 3) // TSS, GDT index 5 and 6 (16 bytes)
 #define NSEGS 7        // null, 4 segments above, TSS (16 bytes, 2 slots)
 
 #ifndef __ASSEMBLER__
@@ -102,6 +103,18 @@ lgdt(uint64 *gdt, int size)
   asm volatile("lgdt %0" : : "m"(desc));
 }
 
+// load the task register
+// x86_64: riscv has nothing like it. ltr looks up sel in the
+// current GDT, loads TR with the TSS base and limit from that
+// descriptor, and marks the descriptor busy (type 9 -> 0xB), so a
+// second ltr with the same descriptor raises #GP. %w0 names the
+// 16-bit register, since ltr takes r/m16.
+static inline void
+ltr(uint16 sel)
+{
+  asm volatile("ltr %w0" : : "r"(sel));
+}
+
 // load the interrupt descriptor table register
 // x86_64: replaces riscv's write to stvec. The operand has the
 // same 10-byte form as lgdt's: limit (size - 1) and the IDT's
@@ -140,6 +153,32 @@ write_cr3(uint64 pa)
 
 typedef uint64 pte_t;
 typedef uint64 *pagetable_t; // 512 PTEs
+
+// 64-bit task state segment (SDM Vol. 3A Figure 10-11), named
+// after Linux's struct x86_hw_tss.
+// x86_64: riscv has nothing like it; uservec loaded the kernel
+// stack pointer from the trapframe itself. On an interrupt or
+// trap from CPL 3 the CPU loads rsp from sp0 before pushing the
+// trap frame. 64-bit mode does no hardware task switching, so
+// this is all the TSS is used for: sp1, sp2 and ist are unused
+// (no IST stacks), and io_bitmap_base beyond the TSS limit means
+// there is no I/O permission bitmap. packed keeps sp0 at offset
+// 4, where the compiler would otherwise pad it to 8.
+struct x86_hw_tss {
+  uint32 reserved1;
+  uint64 sp0;
+  uint64 sp1;
+  uint64 sp2;
+  uint64 reserved2;
+  uint64 ist[7];
+  uint64 reserved3;
+  uint16 reserved4;
+  uint16 io_bitmap_base;
+} __attribute__((packed));
+_Static_assert(sizeof(struct x86_hw_tss) == 104,
+               "x86_hw_tss layout must match the 64-bit TSS");
+_Static_assert(__builtin_offsetof(struct x86_hw_tss, sp0) == 4,
+               "the CPU reads sp0 at offset 4");
 
 #endif // __ASSEMBLER__
 
