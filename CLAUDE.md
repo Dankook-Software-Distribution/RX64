@@ -90,38 +90,42 @@ riscv          원본. 손대지 않음 (비교 기준)
 | `689ffd7` | proc.c `procinit()`(`p->kstack = KSTACK`), `allocpid`, `find_unused()`(p->lock 잡고 반환), `allocproc()`(trapframe = 스택 꼭대기 − 176, `context.rsp` = trapframe − 8로 진입 시 `rsp % 16 == 8`, `context.rip` = `forkret`), `forkret`은 panic 스텁. main에 `procinit()`, `allocproc_test()`(`TEST(5-c-1)`) |
 | `014bec5` | 5-b: x86.h `struct x86_hw_tss`(packed, 크기 104·`sp0` 오프셋 4 assert), `TSSSEG`, `ltr()`. proc.h `struct cpu`에 `gdt`, `tss`. gdt.c `gdt_template`, `set_tss_desc()`, `seginit()` = 복사 → TSS 디스크립터 → `lgdt` → `ltr`. 확인: `TR =0028`, base `&cpus[0].tss`, limit 0x67, GDT 메모리의 디스크립터가 `...8b...`(busy) |
 | `65c6046` | ioapic.c `crst` → `maxredir`, CLAUDE.md 커밋 시작 |
-| (이 커밋) | 5-d·5-e: proc.c `myproc`, `scheduler`(루프 위 `intr_off()`만, `swtch` 직전 `c->tss.sp0 = p->kstack + PGSIZE`, 할 일 없으면 `safe_halt()`), `sched`/`yield`/`sleep_prepare`/`sleep`/`wakeup`(riscv 그대로), `forkret`(p->lock 해제 후 `ret`으로 8바이트 칸에 복귀), 함수 순서를 riscv판에 맞춤(`extern void forkret(void)` 전방 선언). x86.h `safe_halt()`(`sti; hlt`). trap.c `tickslock`, `trapinit()`, `timerintr()`는 CPU 0만 ticks++·`wakeup(&ticks)`, EOI는 모든 CPU, `trap()` 끝에서 타이머이고 `myproc() != 0`이면 `yield()`. main은 `kthread_test()`(TEST(5)) 후 `scheduler()` |
+| `7936650` | 5-d·5-e: proc.c `myproc`, `scheduler`(루프 위 `intr_off()`만, `swtch` 직전 `c->tss.sp0 = p->kstack + PGSIZE`, 할 일 없으면 `safe_halt()`), `sched`/`yield`/`sleep_prepare`/`sleep`/`wakeup`(riscv 그대로), `forkret`(p->lock 해제 후 `ret`으로 8바이트 칸에 복귀), 함수 순서를 riscv판에 맞춤(`extern void forkret(void)` 전방 선언). x86.h `safe_halt()`(`sti; hlt`). trap.c `tickslock`, `trapinit()`, `timerintr()`는 CPU 0만 ticks++·`wakeup(&ticks)`, EOI는 모든 CPU, `trap()` 끝에서 타이머이고 `myproc() != 0`이면 `yield()`. main은 `kthread_test()`(TEST(5)) 후 `scheduler()` |
+| (이 커밋) | 6단계: vm.c 유저 쪽 `#if 0` 해제. 6-a(Claude) `PTE_V/W/U` → `PTE_P/RW/US`, `PTE_R` 삭제. `uvmcreate`는 `kernel_pagetable[256..511]`을 값 그대로 복사(하위 테이블 공유). `freewalk(pagetable, level)`(PML4 = 3, PML4에서는 0~255만, `level > 0`이면 가지, level 0에서 present면 leaf panic, 자식은 `P2V`), `uvmfree`는 3으로 호출. PTE에 넣는 곳은 `V2P(mem)`, 읽는 곳은 `P2V(pa)`. `vmfault`는 `PTE_RW\|PTE_US\|PTE_XD`로 매핑하고 PA 반환(walkaddr와 같게). `uvmalloc` xperm·`uvmcopy` flags는 uint64. `walkaddr`/`copyout` 상한은 `USERTOP`. TEST(6): vm.c `uvm_test()`, kalloc.c `kfreecount()`. Makefile `-D qemu.log` |
 
 현재 Makefile OBJS: entry, main, gdt, early, idt, vectors, trapasm, trap, string, printk, spinlock, proc, kalloc, vm, i8259, lapic, ioapic, swtch.
-현재 main: `seginit` → `idtinit` → `printkinit` → `kinit` → `kvminit` → `kvminithart` → `procinit` → `trapinit` → `picinit` → `lapicinit` → `ioapicinit` → `kthread_test()`(TEST) → `scheduler()`.
+현재 main: `seginit` → `idtinit` → `printkinit` → `kinit` → `kvminit` → `kvminithart` → `procinit` → `trapinit` → `picinit` → `lapicinit` → `ioapicinit` → `uvm_test()`(TEST(6)) → `kthread_test()`(TEST(5)) → `scheduler()`.
 2026-10-30 확인: 부팅 후 `ABC` 다음 `a`/`b`가 선점으로 섞여 찍힌다(`aa`, `bb`가 가끔 보임). `-d int`에 `v=20`만 약 95Hz. scratch 사본에서 두 스레드가 `sys_sleep` 패턴으로 50 tick씩 잠들게 해 hlt 경로(`myproc() == 0`일 때 타이머)와 `wakeup(&ticks)`도 확인했다.
+2026-10-30 확인(6단계): `uvm_test: ok`. uvmalloc 2MB+3페이지(PT 두 개), `USERTOP - PGSIZE`(PML4 255번) 매핑, walkaddr guard, copyout/copyin/copyinstr(페이지 경계), uvmcopy, 유저 cr3로 전환해도 printk 동작, 해제 후 빈 페이지 수 동일. scratch에서 freewalk 512·uvmcopy VA·uvmcreate 빈 테이블로 망가뜨리면 각각 leaf panic, #GP, triple fault로 잡힌다.
 
 알아 둘 점:
 - PTE 비트 이름은 `PTE_RW`/`PTE_US`다. riscv 코드의 `PTE_R/W/X/U/V`를 포팅할 때 바꾼다. x86엔 R 비트가 없고(P면 읽기 가능), 실행 금지는 `PTE_XD`.
 - CR0.WP가 0이라 커널 쓰기는 R/W 비트를 무시한다. 그래서 커널 text가 read-only라도 커널 자신의 쓰기는 막히지 않는다.
 - 아직 x86.h에 없는 것: `inb`, `rdmsr`/`wrmsr`(C), `invlpg`. 필요한 단계에서 추가한다. 대기는 `safe_halt()`(`sti; hlt`)를 쓴다.
 - lapic.c `lapicinit()` 끝의 `lapic_read(APIC_LVTT);`는 `lapic_read` 미사용 에러를 피하려고 사용자가 남긴 줄이다. 실제로 읽는 곳이 생기면 지운다.
-- 임시 코드: proc.c `test_thread`/`test_a`/`test_b`/`kthread_test()`와 main의 호출, defs.h 선언(`TEST(5)`). `allocproc()`으로 만든 프로세스의 8바이트 칸(`*(uint64 *)p->context.rsp`)에 함수 주소를 넣어 `forkret`의 `ret`이 그리로 가게 한다. 스레드는 `intr_on()`으로 시작하고 return하면 안 된다(위가 trapframe). 7단계 `userinit`이 들어오면 지운다. `timerintr()`의 100 tick 출력은 사용자가 뺐다.
+- 임시 코드: proc.c `test_thread`/`test_a`/`test_b`/`kthread_test()`와 main의 호출, defs.h 선언(`TEST(5)`). `allocproc()`으로 만든 프로세스의 8바이트 칸(`*(uint64 *)p->context.rsp`)에 함수 주소를 넣어 `forkret`의 `ret`이 그리로 가게 한다. 스레드는 `intr_on()`으로 시작하고 return하면 안 된다(위가 trapframe). 7단계 `userinit`이 들어오면 지운다. `timerintr()`의 100 tick 출력은 사용자가 뺐다. `TEST(6)`: vm.c 끝의 `uvm_test()`/`test6_check()`, kalloc.c `kfreecount()`, defs.h 선언, main 호출. 7단계에서 같이 지운다.
 - `forkret`은 p->lock을 풀고 `ret`으로 `allocproc`이 남긴 8바이트 칸에 돌아간다. 7단계에서 그 칸에 `trapret` 주소를 넣는다. 이 경로로 들어간 함수는 진입 시 `rsp % 16 == 0`이다(`-mno-sse`라 문제없음). riscv판의 `fsinit`/`kexec`(첫 프로세스)는 7단계에 넣는다.
 - defs.h의 `trapinithart` 선언은 쓰이지 않는다(그 역할은 `idtinit()`). 정리할 때 지운다.
 - 아직 riscv판 파일들이 `riscv.h`를 참조하므로 OBJS 밖 파일은 컴파일되지 않는다. 의도된 것이고, 포팅하면서 하나씩 고친다.
-- 겪은 버그: `orl (EFER_LME | EFER_NXE), %eax`에서 `$`가 빠져 triple fault(`-d int`의 `EFER=0`, 예외 `0xe → 0xd → 0x8`이 단서). idt.c에서 `>>`를 `>`로 써서 주소가 0/1로 들어감(컴파일은 통과). kalloc.c에서 `(uint64)pa >= P2V(...)` 정수-포인터 비교가 `-Werror`에 걸림. 4-a에서 디바이스에 `P2V`를 써서 `KERNBASE + 0xFEC00000`이 64비트를 넘어 `0x7ec00000`(유저 영역)으로 감김 → `DEV2V`. 크기 `0xFFFFFFFF - LAPIC_PA`가 페이지 배수가 아님. lapic.c에서 `(volatile uint32 *)x;`처럼 캐스트 결과를 버림(캐스트는 변수 타입을 바꾸지 않는다). TDCR에 `1`을 씀(인코딩상 divide by 4; divide by 1은 0xB). `static` 함수를 아무도 안 부르면 `-Werror=unused-function`. 5단계: `scheduler()`의 바깥 `for (;;)`를 빠뜨림(`noreturn` 선언 덕에 `-Werror`로 잡힘). `lapiceoi()`를 `if (cpuid() == 0)` 안에 넣음(-smp 1에선 증상 없음, SMP에서 다른 CPU의 타이머가 멈춤). `trap()`의 `yield()`에 `myproc() != 0` 검사가 없었음(스레드가 항상 RUNNABLE이면 숨음).
+- 겪은 버그: `orl (EFER_LME | EFER_NXE), %eax`에서 `$`가 빠져 triple fault(`-d int`의 `EFER=0`, 예외 `0xe → 0xd → 0x8`이 단서). idt.c에서 `>>`를 `>`로 써서 주소가 0/1로 들어감(컴파일은 통과). kalloc.c에서 `(uint64)pa >= P2V(...)` 정수-포인터 비교가 `-Werror`에 걸림. 4-a에서 디바이스에 `P2V`를 써서 `KERNBASE + 0xFEC00000`이 64비트를 넘어 `0x7ec00000`(유저 영역)으로 감김 → `DEV2V`. 크기 `0xFFFFFFFF - LAPIC_PA`가 페이지 배수가 아님. lapic.c에서 `(volatile uint32 *)x;`처럼 캐스트 결과를 버림(캐스트는 변수 타입을 바꾸지 않는다). TDCR에 `1`을 씀(인코딩상 divide by 4; divide by 1은 0xB). `static` 함수를 아무도 안 부르면 `-Werror=unused-function`. 5단계: `scheduler()`의 바깥 `for (;;)`를 빠뜨림(`noreturn` 선언 덕에 `-Werror`로 잡힘). `lapiceoi()`를 `if (cpuid() == 0)` 안에 넣음(-smp 1에선 증상 없음, SMP에서 다른 CPU의 타이머가 멈춤). `trap()`의 `yield()`에 `myproc() != 0` 검사가 없었음(스레드가 항상 RUNNABLE이면 숨음). 6단계: `uvmalloc`/`uvmcopy`의 `mappages`에 `kalloc()` VA를 그대로 넘김(PTE에 `0xffffffff8...`, bit 63이 XD로 읽힘), `freewalk` 재귀에서 `P2V(child)` 빠뜨림(PA를 역참조), `uvmcreate`에서 `pagetable = cr3`(포인터 변수 자체를 덮음, 원본은 `kernel_pagetable`).
 
 ## 다음 할 일
 
 원칙:
 - 처음에는 `-smp 1`로만 돌린다. SMP는 sh 프롬프트가 뜬 다음에 한다.
 - Makefile에는 포팅이 끝난 파일만 넣는다. 단계마다 부팅되는 상태로 커밋한다(중간 WIP 커밋은 OBJS 밖 파일이면 허용).
-- qemu는 `-d int,cpu_reset -no-reboot -no-shutdown`으로 돌린다.
+- qemu는 `-d int,cpu_reset -D qemu.log -no-reboot -no-shutdown`으로 돌린다. 타이머 때문에 tick마다 레지스터 덤프가 나오므로 화면 대신 `qemu.log`로 보낸다(`make clean`이 지움).
 
 | 단계 | 할 일 | 확인 방법 |
 |---|---|---|
 | 0~3 | 완료 | |
 | 4 | 완료(`22b9b6b`~`738e027`) | 타이머 tick ≈100Hz ✓ |
-| 5 | 완료(`069f112`~이 커밋) | 커널 스레드 두 개가 선점으로 번갈아 돈다 ✓ |
-| **6 (다음)** | `uvmcreate`(상위 절반 복사), `uvm*`, `copyin/out`, `freewalk`(256번 이상은 건너뜀), `walkaddr`(`PTE_US`) | 유저 페이지테이블을 만들고 해제해도 커널이 살아 있다 |
-| 7 | initcode(`int $64`), IDT 64번 DPL=3, `forkret` → `trapret`, `syscall.c` argraw, `exec.c`(flags2perm → XD, `tf->rip/rsp`), `usys.pl`, uart.c·console.c·ide.c | `exec("/init")` |
+| 5 | 완료(`069f112`~`7936650`) | 커널 스레드 두 개가 선점으로 번갈아 돈다 ✓ |
+| 6 | 완료(이 커밋) | `uvm_test: ok` ✓ |
+| **7 (다음)** | initcode(`int $64`), IDT 64번 DPL=3, `forkret` → `trapret`, `syscall.c` argraw, `exec.c`(flags2perm → XD, `tf->rip/rsp`), `usys.pl`, uart.c·console.c·ide.c | `exec("/init")` |
 | 8 | sh, usertests, 그다음 SMP(CPU 목록: ACPI MADT 또는 MP 테이블 결정, `entryother.S`, `startothers`) | |
+
+6단계에서 7단계로 넘긴 것: proc.c `proc_pagetable`/`proc_freepagetable`(트램폴린·trapframe 매핑을 빼면 `uvmcreate`/`uvmfree`만 남음), `scheduler`의 cr3 전환(`swtch` 전 `write_cr3(V2P(p->pagetable))`, 돌아오면 커널 테이블), 현재 cr3에서 매핑을 지울 때의 TLB 무효화(riscv는 유저 복귀마다 satp+sfence로 비워졌지만 x86은 아님. `sys_sbrk` 축소 경로가 생길 때 x86.h에 `invlpg` 추가), exec `flags2perm`(ELF 플래그 → `PTE_RW`/`PTE_XD`, `uvmalloc`의 xperm).
 
 4단계에서 정한 것: mp.c(CPU 목록)는 SMP용이라 8단계로 미뤘다. LAPIC/IOAPIC 주소는 qemu pc의 고정값 `LAPIC_PA`/`IOAPIC_PA`를 쓴다. spurious 벡터 `T_SPURIOUS`는 아직 trap()에서 따로 처리하지 않는다(오면 show_regs 후 멈춤. SDM상 spurious에는 EOI를 보내지 않는다).
 
